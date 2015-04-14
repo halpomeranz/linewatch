@@ -1,0 +1,91 @@
+#!/usr/bin/perl
+#
+# linewatch - display lines that are different from the previous line
+#
+# Hal Pomeranz (hal@deer-run.com), 2015-04-14
+# This code released under Creative Commons Attribution license (CC BY)
+
+use strict;
+use Getopt::Std;
+
+$Getopt::Std::STANDARD_HELP_VERSION = 1;
+sub VERSION_MESSAGE {}
+sub HELP_MESSAGE {
+    my($msg) = @_;
+
+    if (length($msg) && !ref($msg)) {
+	warn "*** $msg\n";
+    }
+
+    die <<'EoUseMsg';
+Usage: linewatch -t thresh [ -o offset | -c chars | -k fields [ -d delim ] ] file...
+
+-t threshold  Specify threshold as decimal (.20) or percent (20%)
+-o offset     Character offset from beginning of string (start from 0)
+-c chars      Char positions to compare (Ex: "0..20,40..80")
+-f fields     Delimited fields to compare (Ex: "1,2,5..8")
+-d delimiter  Field delimiter (default is "\s+")
+EoUseMsg
+}
+
+my %opts = ();
+getopts('c:d:f:o:t:', \%opts);
+
+my $threshold = $opts{'t'};
+if (!defined($threshold)) {
+    HELP_MESSAGE("Please define a change threshold with -t");
+}
+if ($threshold =~ /\%$/ || $threshold > 1) {
+    $threshold =~ s/\%$//;
+    $threshold = $threshold / 100;
+}
+
+my($offset, $charlist, $fields) = ($opts{'o'}, $opts{'c'}, $opts{'f'});
+my($specs, $delim) = ();
+if (length($offset)) {
+    unless ($offset =~ /^\d+$/) {
+	HELP_MESSAGE("Invalid offset value $offset");
+    }
+    $specs += 1;
+}
+if (length($fields)) {
+    $specs = 1;
+    $delim = $opts{'d'};
+    $delim = '\s+' unless (length($delim));
+}
+if (length($charlist)) {
+    $specs += 1;
+}
+
+if ($specs > 1) {
+    HELP_MESSAGE("Only pick one of -c/-f/-o");
+}
+
+my($llen, @last, $tlen, @this) = ();
+while (<>) {
+    my $line = $_;
+    if (length($fields)) {
+	my @f = split(/$delim/, $line);
+	@f = eval("\@f[$fields]");
+	HELP_MESSAGE("Invalid field spec '$fields'") if ($@);
+	$line = join('', @f);
+    }
+
+    @this = split(//, $line);
+    splice(@this, 0, $offset) if ($offset);
+    if (length($charlist)) {
+	@this = eval("\@this[$charlist]");
+	HELP_MESSAGE("Invalid character list '$charlist'") if ($@);
+    }
+    $tlen = scalar(@this);
+
+    my $max = ($tlen > $llen) ? $tlen : $llen;
+    my $mismatch = 0;
+    for (my $i = 0; $i < $max; $i++) {
+	$mismatch += 1 if ($this[$i] ne $last[$i]);
+    }
+    print "$.:\t$_" if ($max && (($mismatch / $max) > $threshold));
+
+    $llen = $tlen;
+    @last = @this;
+}
