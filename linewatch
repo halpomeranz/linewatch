@@ -89,3 +89,4 @@ while (<>) {
     $llen = $tlen;
     @last = @this;
 }
+print "$. lines processed\n";
