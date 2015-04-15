@@ -2,7 +2,7 @@
 #
 # linewatch - display lines that are different from the previous line
 #
-# Hal Pomeranz (hal@deer-run.com), 2015-04-14
+# Hal Pomeranz (hal@deer-run.com), 2015-04-15
 # This code released under Creative Commons Attribution license (CC BY)
 
 use strict;
@@ -18,18 +18,25 @@ sub HELP_MESSAGE {
     }
 
     die <<'EoUseMsg';
-Usage: linewatch -t thresh [ -o offset | -c chars | -k fields [ -d delim ] ] file...
+Usage: linewatch -t thresh [options] file ...
 
--t threshold  Specify threshold as decimal (.20) or percent (20%)
--o offset     Character offset from beginning of string (start from 0)
--c chars      Char positions to compare (Ex: "0..20,40..80")
--f fields     Delimited fields to compare (Ex: "1,2,5..8")
--d delimiter  Field delimiter (default is "\s+")
+-t thresh   Specify threshold as decimal (.20) or percent (20%)
+
+Line splitting options:
+-o offset   Character offset from beginning of string (start from 0)
+-c chars    Char positions to compare (Ex: "0..20,40..80")
+-f fields   Delimited fields to compare (Ex: "1,2,5..8")
+-d delim    Field delimiter (default is "\s+")
+
+Context options:
+-C n        show n lines before *and* after changed line
+-B n        show n lines before changed line
+-A n        show n lines after changed line
 EoUseMsg
 }
 
 my %opts = ();
-getopts('c:d:f:o:t:', \%opts);
+getopts('A:B:C:c:d:f:o:t:', \%opts);
 
 my $threshold = $opts{'t'};
 if (!defined($threshold)) {
@@ -57,13 +64,34 @@ if (length($charlist)) {
     $specs += 1;
 }
 
+# only allow one of -c/-f/-o -- this simplifies the main loop below
 if ($specs > 1) {
     HELP_MESSAGE("Only pick one of -c/-f/-o");
 }
 
-my($llen, @last, $tlen, @this) = ();
+# Users should only use -C or -A/-B. Nevertheless try to do something
+# sensible if they use both.
+#
+my($lines_before, $lines_after) = ();
+if ($opts{'C'} =~ /^\d+$/) {
+    $lines_before = $lines_after = $opts{'C'};
+}
+if ($opts{'A'} =~ /^\d+$/) {
+    $lines_after = $opts{'A'};
+}
+if ($opts{'B'} =~ /^\d+$/) {
+    $lines_before = $opts{'B'};
+}
+
+my $after_lines_to_output = 0;   # tracks context lines left to output
+my @before_lines = ();           # ring buffer holding previous lines to output
+my $curr_line = -1;              # location of last line in @before_lines
+my($llen, @lastchars, $tlen, @thischars) = ();
 while (<>) {
+    # $line is the characters from $_ we need to compare.
     my $line = $_;
+
+    # if we're field-splitting, extract the fields and rebuild $line
     if (length($fields)) {
 	my @f = split(/$delim/, $line);
 	@f = eval("\@f[$fields]");
@@ -71,22 +99,69 @@ while (<>) {
 	$line = join('', @f);
     }
 
-    @this = split(//, $line);
-    splice(@this, 0, $offset) if ($offset);
+    # now split line into individual characters (@thischars)
+    @thischars = split(//, $line);
+
+    # if "-o", then chop out the appropriate number of leading chars
+    splice(@thischars, 0, $offset) if ($offset);
+
+    # extract character vectors specified with "-c" option if necessary
     if (length($charlist)) {
-	@this = eval("\@this[$charlist]");
+	@thischars = eval("\@thischars[$charlist]");
 	HELP_MESSAGE("Invalid character list '$charlist'") if ($@);
     }
-    $tlen = scalar(@this);
 
+    # $tlen is number of characters left to compare
+    $tlen = scalar(@thischars);
+
+    # figure out whether this character set or the previous one is longest
     my $max = ($tlen > $llen) ? $tlen : $llen;
+
+    # count the number of character positions that are different
     my $mismatch = 0;
     for (my $i = 0; $i < $max; $i++) {
-	$mismatch += 1 if ($this[$i] ne $last[$i]);
+	$mismatch += 1 if ($thischars[$i] ne $lastchars[$i]);
     }
-    print "$.:\t$_" if ($max && (($mismatch / $max) > $threshold));
 
+    # if we've exceeded our tolerance, output some lines
+    if ($max && (($mismatch / $max) > $threshold)) {
+	# display any context lines before
+	if (@before_lines) {
+	    my $increment = 0;
+	    if (scalar(@before_lines) == $lines_before) { # ring buffer full
+		$increment = $curr_line + 1;
+	    }
+	    
+	    for (my $i = 0; $i < @before_lines; $i++) {
+		my $index = ($i + $increment) % $lines_before;
+		print $before_lines[$index];
+	    }
+
+	    $curr_line = -1;
+	    @before_lines = ();
+	}
+
+	# display line that exceeded threshold, with "!" after line num
+	print "$.!\t$_";
+
+	# set a counter for the number of lines of context to show after
+	$after_lines_to_output = $lines_after;
+    }
+    elsif ($after_lines_to_output) {   # we need to output lines of context
+	print "$..\t$_";
+	$after_lines_to_output--;
+    }
+
+    # current line becomes previous line
     $llen = $tlen;
-    @last = @this;
+    @lastchars = @thischars;
+
+    # save current line in the ring buffer since it's now an old line
+    if ($lines_before && !$after_lines_to_output) {
+	$curr_line = ($curr_line + 1) % $lines_before;
+	$before_lines[$curr_line] = "$..\t$_";
+    }
 }
+
+# output total number of lines seen
 print "$. lines processed\n";

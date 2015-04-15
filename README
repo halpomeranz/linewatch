@@ -16,11 +16,11 @@ is settable by the user). In its simplest form, you specify the
 threshold and your input file:
 
 $ linewatch -t 20% testdata 
-1:	      0123456789012345678901234567890123456789012345678901234567890123456789
-7:	      0123456789012345678901234567890123456789
-9:	      012345678901234567890123456789
-11:	      01234567890123456789
-13:	      0123456789
+1!      0123456789012345678901234567890123456789012345678901234567890123456789
+7!      0123456789012345678901234567890123456789
+9!      012345678901234567890123456789
+11!     01234567890123456789
+13!     0123456789
 14 lines processed
 
 Here we're asking for linewatch to show us any lines that differ by 20%
@@ -51,14 +51,35 @@ can be a Perl regular expression. The default delimiter is whitespace
 for the login shell field changing in a Unix password file:
 
 $ linewatch -f6 -d: -t0 /etc/passwd
-11:	      nobody:*:-2:-2:Unprivileged User:/var/empty:/usr/bin/false
-12:	      root:*:0:0:System Administrator:/var/root:/bin/sh
-13:	      daemon:*:1:1:System Services:/var/root:/usr/bin/false
-14:	      _uucp:*:4:4:Unix to Unix Copy Protocol:/var/spool/uucp:/usr/sbin/uucico
-15:	      _taskgated:*:13:13:Task Gate Daemon:/var/empty:/usr/bin/false
+11!     nobody:*:-2:-2:Unprivileged User:/var/empty:/usr/bin/false
+12!     root:*:0:0:System Administrator:/var/root:/bin/sh
+13!     daemon:*:1:1:System Services:/var/root:/usr/bin/false
+14!     _uucp:*:4:4:Unix to Unix Copy Protocol:/var/spool/uucp:/usr/sbin/uucico
+15!     _taskgated:*:13:13:Task Gate Daemon:/var/empty:/usr/bin/false
 86 lines processed
 
 We use ":" as the delimiter ("-d:"). Note that we're comparing on 
 field number 6 ("-f6"), because fields are also numbered from zero.
 Our tolerance for change is zero ("-t0"), so any change at all will
 trigger output.
+
+It can be helpful to display context around the lines that meet
+our change threshold. Similar to grep, "-B" and "-A" can be used
+to specify a number of lines before and after the "hit" to display.
+"-C" can be used to specify the same amount of context lines to
+be displayed before and after. 
+
+linewatch uses "!" to indicate the changing lines and a "." to show
+the context lines that don't meet the threshold:
+
+$ linewatch -t30 -C2 testdata 
+1!      0123456789012345678901234567890123456789012345678901234567890123456789
+2.      0123456789012345678901234567890123456789012345678901234567890123456789
+3.      012345678901234567890123456789012345678901234567890123456789
+9.      012345678901234567890123456789
+10.     012345678901234567890123456789
+11!     01234567890123456789
+12.     01234567890123456789
+13!     0123456789
+14.     0123456789
+14 lines processed
