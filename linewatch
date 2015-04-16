@@ -2,7 +2,7 @@
 #
 # linewatch - display lines that are different from the previous line
 #
-# Hal Pomeranz (hal@deer-run.com), 2015-04-15
+# Hal Pomeranz (hal@deer-run.com), 2015-04-16
 # This code released under Creative Commons Attribution license (CC BY)
 
 use strict;
@@ -123,6 +123,10 @@ while (<>) {
 	$mismatch += 1 if ($thischars[$i] ne $lastchars[$i]);
     }
 
+    # tracks whether we do output on this line so it doesn't get
+    # into our context ring buffer
+    my $line_was_output = 0;
+
     # if we've exceeded our tolerance, output some lines
     if ($max && (($mismatch / $max) > $threshold)) {
 	# display any context lines before
@@ -143,12 +147,14 @@ while (<>) {
 
 	# display line that exceeded threshold, with "!" after line num
 	print "$.!\t$_";
+	$line_was_output = 1;
 
 	# set a counter for the number of lines of context to show after
 	$after_lines_to_output = $lines_after;
     }
     elsif ($after_lines_to_output) {   # we need to output lines of context
 	print "$..\t$_";
+	$line_was_output = 1;
 	$after_lines_to_output--;
     }
 
@@ -157,7 +163,8 @@ while (<>) {
     @lastchars = @thischars;
 
     # save current line in the ring buffer since it's now an old line
-    if ($lines_before && !$after_lines_to_output) {
+
+    if ($lines_before && !$line_was_output) {
 	$curr_line = ($curr_line + 1) % $lines_before;
 	$before_lines[$curr_line] = "$..\t$_";
     }
