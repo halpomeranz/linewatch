@@ -42,7 +42,7 @@ stamp that's in typical Unix log files.
 
 -c gives you a more flexible way of selecting ranges of characters
 from your input. The syntax is Perl-like: "-c 20..40,60..80".
-Character position is numbered starting from zero, so "0.19" is
+Character position is numbered starting from zero, so "0..19" is
 the first 20 characters of the line.
 
 -f allows you to select fields using a delimiter (-d). The delimiter
